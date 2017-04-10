@@ -69,6 +69,9 @@ class RdbCallback(object):
         else:
             self._escape = string_escape
 
+    def backend_cache_addrs(self, addrs):
+        pass
+
     def encode_key(self, key):
         """
         Escape a given key bytes with the instance chosen escape method.
@@ -316,6 +319,8 @@ class RdbParser(object):
         self._key = None
         self._expiry = None
         self.init_filter(filters)
+        if 'servers' in self._filters:
+            self._callback.backend_cache_addrs(self._filters['servers'])
         self._rdb_version = 0
 
     def parse(self, filename):
@@ -770,6 +775,14 @@ class RdbParser(object):
             self._filters['types'] = [str(x) for x in filters['types']]
         else:
             raise Exception('init_filter', 'invalid value for types in filter %s' %filters['types'])
+
+        if 'servers' in filters:
+            self._filters['servers'] = []
+            for s in filters['servers']:
+                host = s.split(":")[0]
+                port = int(s.split(":")[1])
+                instance = (host, port)
+                self._filters['servers'].append(instance)
         
     def matches_filter(self, db_number, key=None, data_type=None):
 

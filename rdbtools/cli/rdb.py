@@ -2,7 +2,7 @@
 import os
 import sys
 from optparse import OptionParser
-from rdbtools import RdbParser, JSONCallback, DiffCallback, MemoryCallback, ProtocolCallback, PrintAllKeys, KeysOnlyCallback, KeyValsOnlyCallback
+from rdbtools import RdbParser, JSONCallback, DiffCallback, MemoryCallback, ProtocolCallback, PrintAllKeys, KeysOnlyCallback, KeyValsOnlyCallback, KVCallback
 from rdbtools.encodehelpers import ESCAPE_CHOICES
 
 VALID_TYPES = ("hash", "set", "string", "list", "sortedset")
@@ -13,11 +13,13 @@ Example : %prog --command json -k "user.*" /var/redis/6379/dump.rdb"""
 
     parser = OptionParser(usage=usage)
     parser.add_option("-c", "--command", dest="command",
-                  help="Command to execute. Valid commands are json, diff, justkeys, justkeyvals, memory and protocol", metavar="FILE")
+                  help="Command to execute. Valid commands are json, diff, justkeys, justkeyvals, memory, protocol and cache", metavar="FILE")
     parser.add_option("-f", "--file", dest="output",
                   help="Output file", metavar="FILE")
     parser.add_option("-n", "--db", dest="dbs", action="append",
                   help="Database Number. Multiple databases can be provided. If not specified, all databases will be included.")
+    parser.add_option("-s", "--server", dest="servers", default=None,
+                  help="Backend memcached protocal servers. ip1:port1,ip2:port2,ip3:port3")
     parser.add_option("-k", "--key", dest="keys", default=None,
                   help="Keys to export. This can be a regular expression")
     parser.add_option("-o", "--not-key", dest="not_keys", default=None,
@@ -60,6 +62,10 @@ Example : %prog --command json -k "user.*" /var/redis/6379/dump.rdb"""
                 raise Exception('Invalid type provided - %s. Expected one of %s' % (x, (", ".join(VALID_TYPES))))
             else:
                 filters['types'].append(x)
+    if options.servers:
+        filters['servers'] = []
+        for x in options.servers.split(","):
+            filters['servers'].append(x)
 
     out_file_obj = None
     try:
@@ -77,7 +83,8 @@ Example : %prog --command json -k "user.*" /var/redis/6379/dump.rdb"""
                 'justkeyvals': lambda f: KeyValsOnlyCallback(f, string_escape=options.escape),
                 'memory': lambda f: MemoryCallback(PrintAllKeys(f, options.bytes, options.largest),
                                                    64, string_escape=options.escape),
-                'protocol': lambda f: ProtocolCallback(f, string_escape=options.escape)
+                'protocol': lambda f: ProtocolCallback(f, string_escape=options.escape),
+                'cache' : lambda f: KVCallback(f, string_escape=options.escape)
             }[options.command](out_file_obj)
         except:
             raise Exception('Invalid Command %s' % options.command)

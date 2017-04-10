@@ -4,6 +4,7 @@ import json
 
 from rdbtools.parser import RdbCallback
 from rdbtools import encodehelpers
+from pymemcache.client.hash import HashClient
 
 
 class JSONCallback(RdbCallback):
@@ -405,3 +406,40 @@ class ProtocolCallback(RdbCallback):
 
     def expireat(self, key, timestamp):
         self.emit(b'EXPIREAT', key, timestamp)
+
+
+class KVCallback(RdbCallback):
+    def __init__(self, out, string_escape=None):
+        super(KVCallback, self).__init__(string_escape)
+        self._out = out
+        self.reset()
+
+    def backend_cache_addrs(self, addrs):
+        self._addrs = addrs
+        self.client = HashClient(self._addrs)
+
+    def reset(self):
+        self._expires = {}
+
+    def set_expiry(self, key, dt):
+        self._expires[key] = dt
+
+    def get_expiry_seconds(self, key):
+        if key in self._expires:
+            return _unix_timestamp(self._expires[key])
+        return None
+
+    def expires(self, key):
+        return key in self._expires
+
+
+    def start_database(self, db_number):
+        self.reset()
+
+    # String handling
+
+    def set(self, key, value, expiry, info):
+        self.save_to_cache(key, value)
+
+    def save_to_cache(self, key, value):
+        self.client.set(unicode(key, "utf-8"), value)
