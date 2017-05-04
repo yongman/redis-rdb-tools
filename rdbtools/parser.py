@@ -69,7 +69,7 @@ class RdbCallback(object):
         else:
             self._escape = string_escape
 
-    def backend_cache_addrs(self, addrs):
+    def backend_server_addrs(self, addrs):
         pass
 
     def encode_key(self, key):
@@ -320,7 +320,9 @@ class RdbParser(object):
         self._expiry = None
         self.init_filter(filters)
         if 'servers' in self._filters:
-            self._callback.backend_cache_addrs(self._filters['servers'])
+            self._callback.backend_server_addrs(self._filters['servers'])
+        if 'hosts' in self._filters:
+            self._callback.backend_server_addrs(self._filters['hosts'])
         self._rdb_version = 0
 
     def parse(self, filename):
@@ -783,6 +785,8 @@ class RdbParser(object):
                 port = int(s.split(":")[1])
                 instance = (host, port)
                 self._filters['servers'].append(instance)
+        if 'hosts' in filters:
+            self._filters['hosts'] = filters['hosts']
         
     def matches_filter(self, db_number, key=None, data_type=None):
 

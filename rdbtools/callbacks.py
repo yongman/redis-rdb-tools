@@ -5,7 +5,10 @@ import json
 from rdbtools.parser import RdbCallback
 from rdbtools import encodehelpers
 from pymemcache.client.hash import HashClient
-
+from cassandra.cluster import Cluster
+from cassandra import ConsistencyLevel
+from cassandra.query import SimpleStatement
+from cassandra.policies import DCAwareRoundRobinPolicy
 
 class JSONCallback(RdbCallback):
     def __init__(self, out, string_escape=None):
@@ -414,7 +417,7 @@ class KVCallback(RdbCallback):
         self._out = out
         self.reset()
 
-    def backend_cache_addrs(self, addrs):
+    def backend_server_addrs(self, addrs):
         self._addrs = addrs
         self.client = HashClient(self._addrs)
 
@@ -443,3 +446,45 @@ class KVCallback(RdbCallback):
 
     def save_to_cache(self, key, value):
         self.client.set(unicode(key, "utf-8"), value)
+
+class ScyllaCallback(RdbCallback):
+    def __init__(self, out, string_escape=None):
+        super(ScyllaCallback, self).__init__(string_escape)
+        self._out = out
+        self.reset()
+
+    def backend_server_addrs(self, addrs):
+        self._addrs = addrs
+        self.client = Cluster(self._addrs, load_balancing_policy=DCAwareRoundRobinPolicy(local_dc='bjyz'))
+        self.session = self.client.connect('grfeed')
+
+    def reset(self):
+        self._expires = {}
+
+    def set_expiry(self, key, dt):
+        self._expires[key] = dt
+
+    def get_expiry_seconds(self, key):
+        if key in self._expires:
+            return _unix_timestamp(self._expires[key])
+        return None
+
+    def expires(self, key):
+        return key in self._expires
+
+
+    def start_database(self, db_number):
+        self.reset()
+
+    # String handling
+
+    def set(self, key, value, expiry, info):
+        self.save_to_scylla(key, value)
+
+    def save_to_scylla(self, key, value):
+        query = SimpleStatement("INSERT INTO kv (key,value) VALUES (%(key)s, %(value)s)", consistency_level=ConsistencyLevel.LOCAL_ONE)
+        future = self.session.execute_async(query, {'key':key, 'value':bytearray(buffer(value))})
+        try:
+            future.result()
+        except Exception:
+            print("execute async failed")
